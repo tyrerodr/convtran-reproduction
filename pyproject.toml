@@ -28,3 +28,8 @@ torch = { index = "pytorch" }
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cu118"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+]
