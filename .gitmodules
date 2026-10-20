@@ -1,0 +1,3 @@
+[submodule "upstream/ConvTran"]
+	path = upstream/ConvTran
+	url = https://github.com/Navidfoumani/ConvTran.git
