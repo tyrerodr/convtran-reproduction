@@ -1,0 +1,2 @@
+dataset,seed,epochs,batch_size,accuracy,test_loss
+MotorImagery,1234,100,8,0.54,0.6946320056915283

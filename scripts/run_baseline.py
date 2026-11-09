@@ -15,6 +15,14 @@ PATTERN = re.compile(
     r".*?accuracy:\s*([0-9.eE+-]+)"
 )
 FIELDS = ["dataset", "seed", "epochs", "batch_size", "accuracy", "test_loss"]
+BASELINE_BATCH_SIZE = 16
+
+
+def positive_int(value):
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
 
 
 def read_result(log):
@@ -24,7 +32,7 @@ def read_result(log):
     return tuple(map(float, matches[-1])) if matches else None
 
 
-def worker(dataset, data, seed, output):
+def worker(dataset, data, seed, batch_size, output):
     sys.path.insert(0, str(UPSTREAM))
     import utils
 
@@ -40,7 +48,7 @@ def worker(dataset, data, seed, output):
             str(UPSTREAM / "main.py"),
             "--epochs", "100",
             "--gpu", "0",
-            "--batch_size", "16",
+            "--batch_size", str(batch_size),
             "--seed", str(seed),
             "--output_dir", str(output / f"seed{seed}"),
         ]
@@ -50,6 +58,14 @@ def worker(dataset, data, seed, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument(
+        "--batch-size", type=positive_int, default=BASELINE_BATCH_SIZE,
+        help="Training batch size (default: 16, the baseline value).",
+    )
+    parser.add_argument(
+        "--seed", type=int, choices=SEEDS,
+        help="Run a single seed instead of all five.",
+    )
     parser.add_argument("--worker", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if Path(args.dataset).name != args.dataset or args.dataset in (".", ".."):
@@ -63,13 +79,19 @@ def main():
         if not required.is_file():
             parser.error(f"Missing dataset file: {required}")
 
-    output = ROOT / "outputs" / "baseline" / args.dataset.lower()
+    if args.batch_size == BASELINE_BATCH_SIZE:
+        output = ROOT / "outputs" / "baseline" / args.dataset.lower()
+        destination = ROOT / "results" / "baseline_runs.csv"
+    else:
+        output = (ROOT / "outputs" / "adaptations" / f"batch{args.batch_size}"
+                  / args.dataset.lower())
+        destination = ROOT / "results" / "adapted_runs.csv"
     if args.worker is not None:
-        worker(args.dataset, data, args.worker, output)
+        worker(args.dataset, data, args.worker, args.batch_size, output)
         return
 
     rows = []
-    for seed in SEEDS:
+    for seed in [args.seed] if args.seed is not None else SEEDS:
         directory = output / f"seed{seed}"
         directory.mkdir(parents=True, exist_ok=True)
         log = directory / "run.log"
@@ -79,11 +101,17 @@ def main():
                 raise SystemExit(
                     f"Incomplete log: {log}. Inspect and rename it before retrying."
                 )
-            print(f"Training {args.dataset}, seed={seed}. Log: {log}", flush=True)
+            print(
+                f"Training {args.dataset}, seed={seed}, "
+                f"batch_size={args.batch_size}. Log: {log}",
+                flush=True,
+            )
             with log.open("x") as stream:
                 subprocess.run(
                     [sys.executable, str(Path(__file__).resolve()),
-                     "--dataset", args.dataset, "--worker", str(seed)],
+                     "--dataset", args.dataset,
+                     "--batch-size", str(args.batch_size),
+                     "--worker", str(seed)],
                     cwd=ROOT,
                     stdout=stream,
                     stderr=subprocess.STDOUT,
@@ -95,9 +123,12 @@ def main():
         else:
             print(f"Existing result: {args.dataset}, seed={seed}")
         loss, accuracy = result
-        rows.append(dict(zip(FIELDS, [args.dataset, seed, 100, 16, accuracy, loss])))
+        rows.append(dict(zip(
+            FIELDS, [args.dataset, seed, 100, args.batch_size, accuracy, loss]
+        )))
 
-    destination = ROOT / "results" / "baseline_runs.csv"
+    replaced = {(row["dataset"], str(row["seed"]), str(row["batch_size"]))
+                for row in rows}
     destination.parent.mkdir(parents=True, exist_ok=True)
     previous = []
     if destination.exists():
@@ -105,7 +136,10 @@ def main():
             reader = csv.DictReader(stream)
             if reader.fieldnames != FIELDS:
                 raise SystemExit("Existing CSV schema differs; leaving it unchanged.")
-            previous = [row for row in reader if row["dataset"] != args.dataset]
+            previous = [
+                row for row in reader
+                if (row["dataset"], row["seed"], row["batch_size"]) not in replaced
+            ]
 
     with tempfile.NamedTemporaryFile(
         mode="w", newline="", dir=destination.parent, delete=False, suffix=".tmp"
