@@ -25,6 +25,48 @@ def positive_int(value):
     return number
 
 
+def temporal_average_pool(array, factor):
+    """Average pool the last (time) axis with kernel and stride ``factor``.
+
+    Trailing steps that do not fill a window are dropped, as in
+    ``torch.nn.AvgPool1d`` with default arguments.
+    """
+    length = array.shape[-1] // factor
+    windows = array[..., :length * factor]
+    return windows.reshape(*array.shape[:-1], length, factor).mean(axis=-1)
+
+
+def pooled_loader(load, factor):
+    """Wrap upstream Data_Loader so every split is pooled after loading.
+
+    Pooling is applied in memory to the arrays upstream returns, after its
+    cache has been read or written, so the cached full-length data is never
+    replaced and the stratified train/validation split is unchanged.
+    """
+    splits = ("All_train_data", "train_data", "val_data", "test_data")
+
+    def load_pooled(config):
+        data = load(config)
+        lengths = {data[key].shape[-1] for key in splits}
+        if lengths != {int(data["max_len"])}:
+            raise SystemExit(
+                f"Loaded lengths {sorted(lengths)} differ from cached max_len "
+                f"{data['max_len']}; refusing to pool an inconsistent cache."
+            )
+        for key in splits:
+            data[key] = temporal_average_pool(data[key], factor)
+        data["max_len"] = data["train_data"].shape[-1]
+        print(
+            f"Temporal average pooling (kernel={factor}, stride={factor}): "
+            f"{lengths.pop()} -> {data['max_len']} steps; "
+            f"train shape {data['train_data'].shape}",
+            flush=True,
+        )
+        return data
+
+    return load_pooled
+
+
 def read_result(log):
     if not log.is_file():
         return None
@@ -32,7 +74,7 @@ def read_result(log):
     return tuple(map(float, matches[-1])) if matches else None
 
 
-def worker(dataset, data, seed, batch_size, output):
+def worker(dataset, data, seed, batch_size, pool_factor, output):
     sys.path.insert(0, str(UPSTREAM))
     import utils
 
@@ -44,6 +86,8 @@ def worker(dataset, data, seed, batch_size, output):
             config["data_path"] = str(selected)
 
         utils.Data_Verifier = select_dataset
+        if pool_factor > 1:
+            utils.Data_Loader = pooled_loader(utils.Data_Loader, pool_factor)
         sys.argv = [
             str(UPSTREAM / "main.py"),
             "--epochs", "100",
@@ -66,6 +110,11 @@ def main():
         "--seed", type=int, choices=SEEDS,
         help="Run a single seed instead of all five.",
     )
+    parser.add_argument(
+        "--temporal-pool-factor", type=positive_int, default=1,
+        help="Average pool the time axis with this kernel and stride before "
+             "training (default: 1, no pooling).",
+    )
     parser.add_argument("--worker", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if Path(args.dataset).name != args.dataset or args.dataset in (".", ".."):
@@ -79,7 +128,11 @@ def main():
         if not required.is_file():
             parser.error(f"Missing dataset file: {required}")
 
-    if args.batch_size == BASELINE_BATCH_SIZE:
+    if args.temporal_pool_factor > 1:
+        variant = f"batch{args.batch_size}_pool{args.temporal_pool_factor}"
+        output = ROOT / "outputs" / "adaptations" / variant / args.dataset.lower()
+        destination = ROOT / "results" / f"adapted_runs_{variant}.csv"
+    elif args.batch_size == BASELINE_BATCH_SIZE:
         output = ROOT / "outputs" / "baseline" / args.dataset.lower()
         destination = ROOT / "results" / "baseline_runs.csv"
     else:
@@ -87,7 +140,8 @@ def main():
                   / args.dataset.lower())
         destination = ROOT / "results" / "adapted_runs.csv"
     if args.worker is not None:
-        worker(args.dataset, data, args.worker, args.batch_size, output)
+        worker(args.dataset, data, args.worker, args.batch_size,
+               args.temporal_pool_factor, output)
         return
 
     rows = []
@@ -111,6 +165,7 @@ def main():
                     [sys.executable, str(Path(__file__).resolve()),
                      "--dataset", args.dataset,
                      "--batch-size", str(args.batch_size),
+                     "--temporal-pool-factor", str(args.temporal_pool_factor),
                      "--worker", str(seed)],
                     cwd=ROOT,
                     stdout=stream,

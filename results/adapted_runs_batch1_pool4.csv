@@ -1,0 +1,2 @@
+dataset,seed,epochs,batch_size,accuracy,test_loss
+EigenWorms,1234,100,1,0.48854961832061067,1.4072273944625417
