@@ -30,7 +30,7 @@ uv run python scripts/run_baseline.py --dataset MotorImagery --batch-size 8 --se
 uv run python scripts/run_baseline.py --dataset EigenWorms --batch-size 1 --seed 1234 --temporal-pool-factor 4
 ```
 
-[Notebook 01](notebooks/01_reproduction.ipynb) describes BasicMotions. [Notebook 03](notebooks/03_baseline_training.ipynb) documents the baseline and memory pilots. To rerun the 28 completed baseline datasets using the names in the tracked baseline CSV, run:
+[Notebook 01](notebooks/01_reproduction.ipynb) describes BasicMotions. [Notebook 03](notebooks/03_baseline_training.ipynb) documents the baseline and memory pilots. Both read the tracked results with training disabled (`RUN_BASELINE = False` and the pilot flags in notebook 03). To rerun the 28 completed baseline datasets using the names in the tracked baseline CSV, run:
 
 ```bash
 cut -d, -f1 results/baseline_runs.csv | tail -n +2 | sort -u | while IFS= read -r dataset; do
@@ -42,7 +42,9 @@ The baseline uses 100 epochs, batch size 16, embedding dimension 16, eight heads
 
 ## Extension experiments
 
-Set the mode below and use **Run All** in the corresponding notebook. Set `RUN_TRAINING = False` before opening the results tables without training. Set it to `True` to launch the selected plan. Output directories contain logs and checkpoints. The experimental runners reuse complete logs for the same configuration and print a `--retry` command for incomplete runs.
+Each notebook summarizes its tracked results CSV. With `RUN_TRAINING = False`, the saved default, Run All validates the CSV rows of the selected mode and shows the summaries without training and without the UEA archive. Logs and checkpoints are written under `outputs/`, which is not tracked, so a fresh clone has none. The notebooks report the state of local logs separately, and a recorded result does not imply that a local log or checkpoint exists.
+
+Setting `RUN_TRAINING = True` launches the selected plan and requires the raw data. The runners reuse only complete local logs for the same configuration, so without logs they train again runs that are already recorded and rewrite their CSV rows. Incomplete logs are kept, and the notebooks print a `--retry` command for them.
 
 | Notebook | Mode | Comparison | Recorded results |
 |---|---|---|---|
@@ -105,5 +107,9 @@ MotorImagery reached 54.00% at batch size 8. EigenWorms reached 48.85% at batch 
 | Multiscale front end | Original 53.77%, multiscale 53.40% | 3 datasets |
 | Final pooling comparison | Global average 70.96%, average + maximum 70.97% | 28 datasets |
 
-Each row uses its own matched control. Dataset means receive equal weight. Combined pooling improved accuracy on 12 datasets, tied on 6 and scored lower on 10. The "Paired statistical comparison" section of [notebook 06](notebooks/06_pooling_experiments.ipynb) reproduces the Wilcoxon signed-rank test from the report (W = 114, p = 0.696). Mean training time per epoch after the first increased by 2.1%, with nearly identical mean peak CUDA allocation.
+Each experiment trained its own control in separate runs: tAPE + eRPE in notebook 04, the original front end in notebook 05 and global average pooling in notebook 06. Small differences between these controls, such as 70.95% and 70.96% on the same 28 datasets, are not effects of any modification. Dataset means receive equal weight. Combined pooling improved accuracy on 12 datasets, tied on 6 and scored lower on 10. The "Paired statistical comparison" section of [notebook 06](notebooks/06_pooling_experiments.ipynb) reproduces the exploratory Wilcoxon signed-rank test from the report (W = 114, p = 0.696). The 28-dataset pooling benchmark followed a three-dataset exploration whose datasets it includes. The test found no clear evidence of a systematic difference and does not establish that the two poolings are equivalent. Mean training time per epoch after the first increased by 2.1%, with nearly identical mean peak CUDA allocation.
+
+## Limitations
+
+The baseline follows the released code, which differs from the paper in embedding size, optimizer, feed-forward activation and training termination. Differences from Table 2 are therefore descriptive, and we have not established their causes. All seeds of a dataset share one validation split, so the reported variability reflects training rather than data splits. Timings come from single runs on one desktop GPU. MotorImagery and EigenWorms are represented only by single-seed adapted runs. The multiscale comparison covers three datasets, and the pooling analysis across 28 datasets is exploratory. No extension showed a clear overall improvement over its control. The RoPE and sinusoidal variants also disable eRPE, so they compare implemented schemes rather than isolated components.
 
