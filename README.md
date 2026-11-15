@@ -105,5 +105,5 @@ MotorImagery reached 54.00% at batch size 8. EigenWorms reached 48.85% at batch 
 | Multiscale front end | Original 53.77%, multiscale 53.40% | 3 datasets |
 | Final pooling comparison | Global average 70.96%, average + maximum 70.97% | 28 datasets |
 
-Each row uses its own matched control. Dataset means receive equal weight. Combined pooling improved accuracy on 12 datasets, tied on 6 and scored lower on 10. Mean training time per epoch after the first increased by 2.1%, with nearly identical mean peak CUDA allocation.
+Each row uses its own matched control. Dataset means receive equal weight. Combined pooling improved accuracy on 12 datasets, tied on 6 and scored lower on 10. The "Paired statistical comparison" section of [notebook 06](notebooks/06_pooling_experiments.ipynb) reproduces the Wilcoxon signed-rank test from the report (W = 114, p = 0.696). Mean training time per epoch after the first increased by 2.1%, with nearly identical mean peak CUDA allocation.
 
