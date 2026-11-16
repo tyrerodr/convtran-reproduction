@@ -113,3 +113,9 @@ Each experiment trained its own control in separate runs: tAPE + eRPE in noteboo
 
 The baseline follows the released code, which differs from the paper in embedding size, optimizer, feed-forward activation and training termination. Differences from Table 2 are therefore descriptive, and we have not established their causes. All seeds of a dataset share one validation split, so the reported variability reflects training rather than data splits. Timings come from single runs on one desktop GPU. MotorImagery and EigenWorms are represented only by single-seed adapted runs. The multiscale comparison covers three datasets, and the pooling analysis across 28 datasets is exploratory. No extension showed a clear overall improvement over its control. The RoPE and sinusoidal variants also disable eRPE, so they compare implemented schemes rather than isolated components.
 
+## Authors
+
+- **Tyrone Eduardo Rodríguez Motato** - [tyrone.rodriguezmotato@ucdconnect.ie](mailto:tyrone.rodriguezmotato@ucdconnect.ie)
+- **Jakub Sikora** - [jakub.sikora@ucdconnect.ie](mailto:jakub.sikora@ucdconnect.ie)
+
+School of Computer Science, University College Dublin.
